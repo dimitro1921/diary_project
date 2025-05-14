@@ -1,11 +1,11 @@
 from typing import List
-from app.models import Entry
+from app.schemas import EntryOut
 from collections import defaultdict
 
-def entries_to_markdown(entries: List[Entry]) -> str:
+def entries_to_markdown(entries: List[EntryOut]) -> str:
     """
-    Convert a list of entries into a grouped Markdown string.
-    Entries are grouped by date and include entry type and tags.
+    Convert a list of EntryOut items into Markdown format,
+    grouped by date with entry type, time, and optional tags.
     """
     grouped = defaultdict(list)
     for entry in entries:

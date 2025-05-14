@@ -5,6 +5,31 @@ from typing import List, Optional
 
 from app import models, schemas
 
+# ----------- USERS -----------
+
+def create_user(db: Session, user: schemas.UserIn) -> models.User:
+    """
+    Create and store a new user in the database.
+    """
+    db_user = models.User(**user.model_dump())
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def get_user_by_telegram_id(db: Session, telegram_id: int) -> Optional[models.User]:
+    """
+    Find a user by their Telegram ID.
+    """
+    return db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
+
+def get_all_users(db: Session) -> List[models.User]:
+    """
+    Return all users who are eligible to receive daily prompts.
+    """
+    return db.query(models.User).filter(models.User.receive_prompts == True).all()
+
+# ----------- ENTRIES -----------
 
 def create_entry(db: Session, entry: schemas.EntryIn) -> models.Entry:
     """
