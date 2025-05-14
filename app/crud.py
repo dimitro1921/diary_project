@@ -17,6 +17,9 @@ def create_user(db: Session, user: schemas.UserIn) -> models.User:
     db.refresh(db_user)
     return db_user
 
+def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
 def get_user_by_telegram_id(db: Session, telegram_id: int) -> Optional[models.User]:
     """
     Find a user by their Telegram ID.
@@ -28,6 +31,28 @@ def get_all_users(db: Session) -> List[models.User]:
     Return all users who are eligible to receive daily prompts.
     """
     return db.query(models.User).filter(models.User.receive_prompts == True).all()
+
+def update_user_by_id(db: Session, user_id: int, updates: dict) -> Optional[models.User]:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+
+    for key, value in updates.items():
+        if hasattr(user, key):
+            setattr(user, key, value)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+def delete_user_by_id(db: Session, user_id: int) -> bool:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return False
+
+    db.delete(user)
+    db.commit()
+    return True
 
 # ----------- ENTRIES -----------
 

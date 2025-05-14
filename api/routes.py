@@ -9,13 +9,14 @@ from app.exporter import entries_to_markdown
 
 router = APIRouter()
 
+# -------------------- ENTRY ENDPOINTS --------------------
+
 @router.post("/entry", response_model=schemas.EntryOut)
 def create_entry(entry: schemas.EntryIn, db: Session = Depends(get_db)):
     """
     Create a new diary entry.
     """
     return crud.create_entry(db, entry)
-
 
 @router.get("/entry/{entry_date}", response_model=List[schemas.EntryOut])
 def read_entries_by_date(entry_date: date, user_id: int, db: Session = Depends(get_db)):
@@ -25,7 +26,6 @@ def read_entries_by_date(entry_date: date, user_id: int, db: Session = Depends(g
     entries = crud.get_entries_by_date(db, user_id, entry_date)
     return [schemas.EntryOut.model_validate(e) for e in entries]
 
-
 @router.get("/list", response_model=List[schemas.EntryOut])
 def list_recent_entries(user_id: int, limit: int = Query(5, le=50), db: Session = Depends(get_db)):
     """
@@ -33,7 +33,6 @@ def list_recent_entries(user_id: int, limit: int = Query(5, le=50), db: Session 
     """
     entries = crud.list_recent_entries(db, user_id, limit)
     return [schemas.EntryOut.model_validate(e) for e in entries]
-
 
 @router.get("/export")
 def export_entries(user_id: int,
@@ -46,7 +45,37 @@ def export_entries(user_id: int,
     entries = crud.export_entries(db, user_id, start_date, end_date)
     if not entries:
         return {"message": "No entries found in the given date range."}
-
     entries_out = [schemas.EntryOut.model_validate(e) for e in entries]
     markdown = entries_to_markdown(entries_out)
     return {"markdown": markdown}
+
+
+# -------------------- USER ENDPOINTS --------------------
+
+@router.post("/users", response_model=schemas.UserOut)
+def create_user(user: schemas.UserIn, db: Session = Depends(get_db)):
+    existing = crud.get_user_by_telegram_id(db, user.telegram_id)
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+    return crud.create_user(db, user)
+
+@router.get("/users/{user_id}", response_model=schemas.UserOut)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.patch("/users/{user_id}", response_model=schemas.UserOut)
+def update_user(user_id: int, updates: dict, db: Session = Depends(get_db)):
+    user = crud.update_user_by_id(db, user_id, updates)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    success = crud.delete_user_by_id(db, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted"}
