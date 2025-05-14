@@ -4,29 +4,41 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import pytest
 from fastapi.testclient import TestClient
-from api.main import app
-from app.db import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.db import get_db
+from app.db import get_db, Base
+from app import models
+from api.main import app
 
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
+# ------------------------
+# Create test engine
+# ------------------------
+
+SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
+
 engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# -------- Override Dependency --------
+# ------------------------
+# Override dependency
+# ------------------------
 
 @pytest.fixture(scope="module")
 def client():
+    # Create all tables using the real Base from app.db
     Base.metadata.create_all(bind=engine)
+
     def override_get_db():
         db = TestingSessionLocal()
         try:
             yield db
         finally:
             db.close()
+
     app.dependency_overrides[get_db] = override_get_db
+
     yield TestClient(app)
+
     Base.metadata.drop_all(bind=engine)
 
 # -------- Tests --------
