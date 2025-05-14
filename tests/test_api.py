@@ -80,3 +80,47 @@ def test_export_entries(client):
     result = response.json()
     assert "markdown" in result
     assert "# 📓" in result["markdown"]
+
+
+# -------- USER TESTS --------
+
+def test_create_user(client):
+    data = {
+        "telegram_id": 999999,
+        "username": "testuser",
+        "receive_prompts": True,
+        "channel": "telegram"
+    }
+    response = client.post("/users", json=data)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["telegram_id"] == 999999
+    assert result["username"] == "testuser"
+    global created_user_id
+    created_user_id = result["id"]
+
+def test_get_user(client):
+    response = client.get(f"/users/{created_user_id}")
+    assert response.status_code == 200
+    result = response.json()
+    assert result["id"] == created_user_id
+    assert result["telegram_id"] == 999999
+
+def test_update_user(client):
+    update_data = {
+        "receive_prompts": False
+    }
+    response = client.patch(f"/users/{created_user_id}", json=update_data)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["receive_prompts"] is False
+
+def test_delete_user(client):
+    response = client.delete(f"/users/{created_user_id}")
+    assert response.status_code == 200
+    result = response.json()
+    assert result["message"] == "User deleted"
+
+    # Confirm deletion
+    confirm = client.get(f"/users/{created_user_id}")
+    assert confirm.status_code == 404
