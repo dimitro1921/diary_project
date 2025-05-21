@@ -2,50 +2,72 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from datetime import date
 from typing import List, Optional
-
+from sqlalchemy.exc import IntegrityError
 from app import models, schemas
 
-# ----------- USERS -----------
+# ------------------------
+# USER CRUD
+# ------------------------
 
-def create_user(db: Session, user: schemas.UserIn) -> models.User:
+def get_user_by_external_id(db: Session, external_id: int, source: str = "telegram") -> Optional[models.User]:
     """
-    Create and store a new user in the database.
+    Fetch a user by their external ID and source (e.g., Telegram user_id + platform).
     """
+    return db.execute(
+        select(models.User).where(
+            models.User.external_id == external_id,
+            models.User.source == source
+        )
+    ).scalar_one_or_none()
+
+def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     db_user = models.User(**user.model_dump())
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    try:
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("User with this external_id and source already exists")
+
+def get_or_create_user(db: Session, user: schemas.UserCreate) -> models.User:
+    """
+    Return an existing user, or create one if not found.
+    """
+    existing_user = get_user_by_external_id(db, user.external_id, user.source)
+    if existing_user:
+        return existing_user
+    return create_user(db, user)
 
 def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
-    return db.query(models.User).filter(models.User.id == user_id).first()
+    """
+    Fetch a user by internal ID (primary key).
+    """
+    return db.execute(
+        select(models.User).where(models.User.id == user_id)
+    ).scalar_one_or_none()
 
-def get_user_by_telegram_id(db: Session, telegram_id: int) -> Optional[models.User]:
+def update_user_by_id(db: Session, user_id: int, updates: schemas.UserUpdate) -> Optional[models.User]:
     """
-    Find a user by their Telegram ID.
+    Update a user's data by internal ID.
     """
-    return db.query(models.User).filter(models.User.telegram_id == telegram_id).first()
-
-def get_all_users(db: Session) -> List[models.User]:
-    """
-    Return all users who are eligible to receive daily prompts.
-    """
-    return db.query(models.User).filter(models.User.receive_prompts == True).all()
-
-def update_user_by_id(db: Session, user_id: int, updates: dict) -> Optional[models.User]:
     user = get_user_by_id(db, user_id)
     if not user:
         return None
 
-    for key, value in updates.items():
-        if hasattr(user, key):
-            setattr(user, key, value)
+    update_data = updates.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(user, key, value)
 
     db.commit()
     db.refresh(user)
     return user
 
 def delete_user_by_id(db: Session, user_id: int) -> bool:
+    """
+    Delete a user by internal ID.
+    """
     user = get_user_by_id(db, user_id)
     if not user:
         return False
@@ -54,7 +76,21 @@ def delete_user_by_id(db: Session, user_id: int) -> bool:
     db.commit()
     return True
 
-# ----------- ENTRIES -----------
+def deactivate_user(db: Session, user_id: int) -> bool:
+    """
+    Mark user as inactive instead of deleting.
+    """
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return False
+    user.is_active = False
+    db.commit()
+    return True
+
+
+# ------------------------
+# ENTRY CRUD
+# ------------------------
 
 def create_entry(db: Session, entry: schemas.EntryIn) -> models.Entry:
     """
@@ -65,7 +101,6 @@ def create_entry(db: Session, entry: schemas.EntryIn) -> models.Entry:
     db.commit()
     db.refresh(db_entry)
     return db_entry
-
 
 def get_entries_by_date(db: Session, user_id: int, entry_date: date) -> List[models.Entry]:
     """
@@ -78,7 +113,6 @@ def get_entries_by_date(db: Session, user_id: int, entry_date: date) -> List[mod
         )
     ).scalars().all()
 
-
 def list_recent_entries(db: Session, user_id: int, limit: int = 5) -> List[models.Entry]:
     """
     Get the most recent entries for a user, limited by count.
@@ -89,7 +123,6 @@ def list_recent_entries(db: Session, user_id: int, limit: int = 5) -> List[model
         .order_by(models.Entry.timestamp.desc())
         .limit(limit)
     ).scalars().all()
-
 
 def export_entries(
     db: Session,
